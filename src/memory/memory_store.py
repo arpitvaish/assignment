@@ -31,7 +31,9 @@ class VectorMemoryStore:
         self.max_size = max_size
         self.similarity_threshold = similarity_threshold
 
-    def add(self, content: str, embedding: List[float], metadata: dict = {}) -> str:
+    def add(self, content: str, embedding: List[float], metadata: dict = None) -> str:
+        if metadata is None:
+            metadata = {}
         entry = MemoryEntry(content=content, embedding=embedding, metadata=metadata)
 
         # evict if at capacity — just drop the first one (FIFO, not LRU)

@@ -81,11 +81,10 @@ def tool(name: str = None, description: str = ""):
 
 
 class ToolRegistry:
-    """Global tool registry.
+    """Global tool registry."""
 
-    BUG: _tools is a class variable — all instances share the same dict.
-    """
-    _tools: Dict[str, Tool] = {}
+    def __init__(self):
+        self._tools: Dict[str, Tool] = {}
 
     def register(self, tool: Tool):
         self._tools[tool.name] = tool

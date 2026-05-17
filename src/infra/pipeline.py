@@ -102,12 +102,16 @@ class AgentPipeline:
         completed = set()
 
         for step in self.steps:
-            # BUG: `continue` here skips the inner for-loop iteration,
-            # not the outer one — step runs even when deps are missing
+            # Check if all dependencies are satisfied
+            skip_step = False
             for dep in step.depends_on:
                 if dep not in completed:
-                    results.append(StepResult(step.name, StepStatus.SKIPPED))
-                    continue
+                    skip_step = True
+                    break
+
+            if skip_step:
+                results.append(StepResult(step.name, StepStatus.SKIPPED))
+                continue
 
             for hook in self.hooks["before_step"]:
                 hook(step.name, context)
