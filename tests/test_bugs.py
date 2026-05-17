@@ -28,11 +28,11 @@ class TestBaseAgentBugs:
         del agent1
         assert "agent_1" in _agent_registry  # still there!
 
-    def test_cost_calculation_hardcoded(self):
-        """Test that cost calculation uses unrealistic hardcoded rate."""
-        agent = BaseAgent("test_agent", api_key="test_key")
+    def test_cost_calculation_model_specific(self):
+        """Cost rate is now model-specific, not a single hardcoded value."""
+        agent_gpt4 = BaseAgent("cost_agent_gpt4", model="gpt-4", api_key="test_key")
+        agent_35 = BaseAgent("cost_agent_35", model="gpt-3.5-turbo", api_key="test_key")
 
-        # Mock the API response
         mock_response = MagicMock()
         mock_response.json.return_value = {
             "usage": {"total_tokens": 1000},
@@ -40,13 +40,13 @@ class TestBaseAgentBugs:
         }
 
         with patch("requests.post", return_value=mock_response):
-            agent._call_llm([{"role": "user", "content": "test"}])
+            agent_gpt4._call_llm([{"role": "user", "content": "test"}])
+            agent_35._call_llm([{"role": "user", "content": "test"}])
 
-        # Cost should be 1000 * 0.00001 = 0.01
-        # This is unrealistic for GPT-4 (should be ~0.03-0.06 per 1k tokens)
-        expected_cost = 1000 * 0.00001
-        assert agent.total_cost == expected_cost
-        assert agent.total_cost < 0.02  # confirms hardcoded low rate
+        # gpt-4 costs more than gpt-3.5-turbo
+        assert agent_gpt4.total_cost > agent_35.total_cost
+        # gpt-4 rate is 0.00003/token, not old wrong 0.00001
+        assert agent_gpt4.total_cost == 1000 * 0.00003
 
 
 class TestToolRegistryBug:

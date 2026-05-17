@@ -26,13 +26,19 @@ class Tool:
         self.call_count = 0
         self.total_latency = 0.0
 
-    def run(self, **kwargs) -> Any:
+    def run(self, **kwargs) -> ToolResult:
         self.call_count += 1
         start = time.time()
-        result = self.fn(**kwargs)
-        elapsed = (time.time() - start) * 1000
-        self.total_latency += elapsed
-        return result
+        try:
+            data = self.fn(**kwargs)
+            elapsed = (time.time() - start) * 1000
+            self.total_latency += elapsed
+            return ToolResult(success=True, data=data, latency_ms=elapsed)
+        except Exception as e:
+            elapsed = (time.time() - start) * 1000
+            self.total_latency += elapsed
+            return ToolResult(success=False, data=None,
+                              error=f"{type(e).__name__}: {e}", latency_ms=elapsed)
 
     def to_schema(self) -> dict:
         return {
