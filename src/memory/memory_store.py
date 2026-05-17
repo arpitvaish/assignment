@@ -3,10 +3,10 @@ Memory subsystem — vector store with cosine similarity search.
 """
 import time
 import json
+import uuid
 import numpy as np
 from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Any
-import hashlib
 
 
 @dataclass
@@ -21,7 +21,7 @@ class MemoryEntry:
 
     def __post_init__(self):
         if not self.id:
-            self.id = hashlib.md5(self.content.encode()).hexdigest()
+            self.id = str(uuid.uuid4())
 
 
 class VectorMemoryStore:

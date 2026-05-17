@@ -60,21 +60,21 @@ class BaseAgent:
 
     def run(self, user_input: str) -> str:
         self._running = True
-        messages = [{"role": "user", "content": user_input}]
-        self.history.extend(messages)
+        self.history.append({"role": "user", "content": user_input})
+        messages = list(self.history)
 
-        for attempt in range(self.max_retries):
-            try:
-                response = self._call_llm(messages)
-                self._running = False
-                return response
-            except Exception as e:
-                logger.error(f"Attempt {attempt} failed: {e}")
-                self.errors.append(str(e))
-                time.sleep(2 ** attempt)
-
-        self._running = False
-        return "Agent failed after retries"
+        try:
+            for attempt in range(self.max_retries):
+                try:
+                    response = self._call_llm(messages)
+                    return response
+                except Exception as e:
+                    logger.error(f"Attempt {attempt} failed: {e}")
+                    self.errors.append(str(e))
+                    time.sleep(2 ** attempt)
+            return "Agent failed after retries"
+        finally:
+            self._running = False
 
     def _call_llm(self, messages: List[dict], tools: Optional[List[dict]] = None):
         """Unified LLM call. Pass tools to enable tool calling mode."""
@@ -133,42 +133,46 @@ class ToolCallingAgent(BaseAgent):
 
     def run(self, user_input: str, max_steps: int = 10) -> str:
         self._running = True
-        messages = [{"role": "user", "content": user_input}]
-        self.history.extend(messages)
+        self.history.append({"role": "user", "content": user_input})
+        # Use full history so the LLM retains context across multi-turn calls.
+        # Original started with only [user_input], causing amnesia on re-runs.
+        messages = list(self.history)
 
-        for _ in range(max_steps):
-            tools_schema = [t.to_schema() for t in self.tools]
-            response_text, tool_calls = self._call_llm(messages, tools=tools_schema)
+        try:
+            for _ in range(max_steps):
+                tools_schema = [t.to_schema() for t in self.tools]
+                response_text, tool_calls = self._call_llm(messages, tools=tools_schema)
 
-            if not tool_calls:
-                self._running = False
-                self.history.append({"role": "assistant", "content": response_text})
-                return response_text
+                if not tool_calls:
+                    self.history.append({"role": "assistant", "content": response_text})
+                    return response_text
 
-            messages.append({
-                "role": "assistant",
-                "content": response_text,
-                "tool_calls": tool_calls,
-            })
-            self.history.append(messages[-1])
-
-            for tc in tool_calls:
-                tool_name = tc["function"]["name"]
-                try:
-                    tool_args = json.loads(tc["function"]["arguments"])
-                except json.JSONDecodeError:
-                    tool_args = {}
-                result = self._execute_tool(tool_name, tool_args)
-                tool_msg = {
-                    "role": "tool",
-                    "tool_call_id": tc["id"],
-                    "content": str(result),
+                assistant_msg = {
+                    "role": "assistant",
+                    "content": response_text,
+                    "tool_calls": tool_calls,
                 }
-                messages.append(tool_msg)
-                self.history.append(tool_msg)
+                messages.append(assistant_msg)
+                self.history.append(assistant_msg)
 
-        self._running = False
-        return "Max steps exceeded"
+                for tc in tool_calls:
+                    tool_name = tc["function"]["name"]
+                    try:
+                        tool_args = json.loads(tc["function"]["arguments"])
+                    except json.JSONDecodeError:
+                        tool_args = {}
+                    result = self._execute_tool(tool_name, tool_args)
+                    tool_msg = {
+                        "role": "tool",
+                        "tool_call_id": tc["id"],
+                        "content": str(result),
+                    }
+                    messages.append(tool_msg)
+                    self.history.append(tool_msg)
+
+            return "Max steps exceeded"
+        finally:
+            self._running = False
 
     def _execute_tool(self, name: str, args: dict) -> Any:
         for tool in self.tools:

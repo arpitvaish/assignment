@@ -1,5 +1,7 @@
 # WRITEUP.md — Arpit Vaish
 
+Full bug inventory with criticality ratings and production impact analysis: [`docs/bug_list.md`](docs/bug_list.md).
+
 ---
 
 ## Bugs found
@@ -27,6 +29,18 @@ Every `BaseAgent.__init__` inserts `self` into a module-level dict. Nothing remo
 **Bug 6 — Tool-calling path skips cost tracking** (`base_agent.py:159`)
 
 `_call_llm_with_tools` tallied `total_tokens` but never computed `total_cost`. Fixed as a side effect of consolidating both paths (see refactoring below).
+
+**Bug 7 — MD5 content-hash IDs collide on duplicate content** (`memory_store.py:24`)
+
+`MemoryEntry.id = md5(content)` means storing the same text twice yields identical IDs. `get_by_id` returns the first match; the second entry is unreachable and silently shadows the first. An agent that stores "no results found" from two different tool calls ends up with two entries that can't be independently addressed or deleted. Fix: `str(uuid.uuid4())` — content-independent, collision-free.
+
+**Bug 8 — ToolCallingAgent amnesia across turns** (`base_agent.py:134`)
+
+`ToolCallingAgent.run()` built `messages = [{"role": "user", "content": user_input}]` — a fresh single-message list on every call. Prior history in `self.history` was appended-to but never sent to the LLM. A user saying "do that again" would get a confused response because the LLM had no record of prior turns. Fix: `messages = list(self.history)` after appending the new user message. Same pattern applied to `BaseAgent.run()`.
+
+**Bug 9 — `_running` flag not reset on unexpected exception** (`base_agent.py:61, 134`)
+
+Both `run()` methods reset `_running = False` only at explicit return points. An exception escaping the retry loop left the flag set permanently — any caller polling `agent._running` as a health check would get a false positive after a crash. Fix: `try/finally` block guarantees cleanup on all exit paths.
 
 ---
 
